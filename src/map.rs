@@ -1,6 +1,6 @@
-use std::{collections::HashMap, sync::mpsc::Receiver};
+use std::collections::HashMap;
 
-use crate::{renderer::Renderer, Message, NB_ROBOTS};
+use crate::Robot;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CellType {
@@ -26,41 +26,41 @@ pub fn clean_map(map: &mut Map2D) {
         .for_each(|row| row.iter_mut().for_each(|c| *c = CellType::Blank));
 }
 
-pub fn initialize_positions() -> HashMap<u32, (i32, i32)> {
+pub fn initialize_positions(robots: &Vec<Robot>) -> HashMap<u32, Robot> {
     let mut positions = HashMap::new();
-    for id in 0..NB_ROBOTS {
-        positions.insert(id, INITIAL_POSITION);
+    for robot in robots {
+        let guard = robot.lock().expect("No concurrence for now");
+        let id = guard.id;
+        positions.insert(id, robot.clone());
     }
     positions
 }
 
-pub fn update_and_draw_map(
-    rx: &Receiver<Message>,
-    positions: &mut HashMap<u32, Position>,
-    map: &mut Map2D,
-    renderer: &dyn Renderer,
-) {
-    if let Ok(Message::NewPosition { id, dx, dy }) = rx.recv() {
-        update_positions_map(positions, map, id, dx, dy);
-        renderer.clean();
-        renderer.draw_map(map);
-    }
-}
-
 pub fn update_positions_map(
-    positions: &mut HashMap<u32, Position>,
+    positions: &mut HashMap<u32, Robot>,
     map: &mut Map2D,
     id: u32,
     dx: i32,
     dy: i32,
 ) {
-    if let Some(position) = positions.get_mut(&id) {
-        position.0 = (position.0 + dx).clamp(MIN_WEIGHT, MAX_WEIGHT - 1);
-        position.1 = (position.1 + dy).clamp(MIN_HEIGHT, MAX_HEIGHT - 1);
-    }
+    update_position(positions, id, dx, dy);
+    update_map(map, positions);
+}
 
+pub fn update_position(positions: &mut HashMap<u32, Robot>, id: u32, dx: i32, dy: i32) {
+    if let Some(robot) = positions.get_mut(&id) {
+        let mut inner = robot.lock().expect("no concurrence here");
+        let (x, y) = inner.coords;
+        inner.coords.0 = (x + dx).clamp(MIN_WEIGHT, MAX_WEIGHT - 1);
+        inner.coords.1 = (y + dy).clamp(MIN_HEIGHT, MAX_HEIGHT - 1);
+    }
+}
+
+fn update_map(map: &mut Map2D, positions: &mut HashMap<u32, Robot>) {
     clean_map(map);
-    for (&id, &(x, y)) in positions.iter() {
+    for (&id, robot) in positions.iter() {
+        let inner = robot.lock().expect("no concurrence here");
+        let (x, y) = inner.coords;
         map[y as usize][x as usize] = match id {
             0..=4 => CellType::Robot(id),
             _ => unimplemented!(),

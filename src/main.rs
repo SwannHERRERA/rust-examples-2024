@@ -1,13 +1,17 @@
-use map::{initialize_map, initialize_positions, update_and_draw_map};
+use error::SimulationError;
+use map::{Position, INITIAL_POSITION};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use renderer::TerminalRenderer;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::trace;
 use utils::configure_logger;
 
+mod error;
+#[cfg(feature = "term_ui")]
+mod graphical_term_ui;
 mod map;
 mod renderer;
 mod utils;
@@ -25,7 +29,15 @@ enum Message {
     NewPosition { id: u32, dx: i32, dy: i32 },
 }
 
-fn update_position(id: u32, command_rx: Receiver<Command>, tx: Sender<Message>) {
+pub type Robot = Arc<Mutex<InnerRobot>>;
+
+pub struct InnerRobot {
+    pub id: u32,
+    pub coords: Position,
+    sender: Sender<Command>,
+}
+
+fn generate_position_variation(id: u32, command_rx: Receiver<Command>, tx: Sender<Message>) {
     let seed = [id as u8; 32];
     let mut rng = StdRng::from_seed(seed);
     while let Ok(command) = command_rx.recv() {
@@ -41,40 +53,32 @@ fn update_position(id: u32, command_rx: Receiver<Command>, tx: Sender<Message>) 
     }
 }
 
-fn initialize_robots(tx: Sender<Message>) -> Vec<Sender<Command>> {
+fn initialize_robots(tx: Sender<Message>) -> Vec<Robot> {
     let mut command_txs = vec![];
     for id in 0..NB_ROBOTS {
         let (command_tx, command_rx) = mpsc::channel::<Command>();
-        command_txs.push(command_tx.clone());
         let tx = tx.clone();
         thread::spawn(move || {
-            update_position(id, command_rx, tx);
+            generate_position_variation(id, command_rx, tx);
         });
+        let robot = Arc::new(Mutex::new(InnerRobot {
+            id,
+            coords: INITIAL_POSITION,
+            sender: command_tx.clone(),
+        }));
+        command_txs.push(robot);
     }
     command_txs
 }
 
-fn main() {
-    // Startup
+fn main() -> std::result::Result<(), SimulationError> {
     let _guard = configure_logger();
-    let (tx, rx) = mpsc::channel::<Message>();
-    let command_txs = initialize_robots(tx);
-    let mut positions = initialize_positions();
-    let mut map = initialize_map();
-
-    let renderer = TerminalRenderer;
-
-    loop {
-        for command_tx in &command_txs {
-            command_tx
-                .send(Command::Move)
-                .expect("Failed to send move command");
-        }
-
-        for _ in 0..NB_ROBOTS {
-            update_and_draw_map(&rx, &mut positions, &mut map, &renderer);
-        }
-
-        thread::sleep(TICK_DURATION);
+    #[cfg(feature = "term_ui")]
+    {
+        graphical_term_ui::run()
+    }
+    #[cfg(not(feature = "term_ui"))]
+    {
+        renderer::run()
     }
 }
