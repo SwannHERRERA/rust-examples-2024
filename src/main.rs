@@ -1,4 +1,5 @@
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -38,7 +39,8 @@ fn configure_logger() -> WorkerGuard {
 }
 
 fn update_position(id: u32, command_rx: Receiver<Command>, tx: Sender<Message>) {
-    let mut rng = rand::thread_rng();
+    let seed = [id as u8; 32];
+    let mut rng = StdRng::from_seed(seed);
     while let Ok(command) = command_rx.recv() {
         match command {
             Command::Move => {
