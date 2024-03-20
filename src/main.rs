@@ -1,6 +1,7 @@
 use map::{initialize_map, initialize_positions, update_and_draw_map};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use renderer::TerminalRenderer;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
@@ -8,6 +9,7 @@ use tracing::trace;
 use utils::configure_logger;
 
 mod map;
+mod renderer;
 mod utils;
 
 pub const NB_ROBOTS: u32 = 5;
@@ -60,6 +62,8 @@ fn main() {
     let mut positions = initialize_positions();
     let mut map = initialize_map();
 
+    let renderer = TerminalRenderer;
+
     loop {
         for command_tx in &command_txs {
             command_tx
@@ -68,7 +72,7 @@ fn main() {
         }
 
         for _ in 0..NB_ROBOTS {
-            update_and_draw_map(&rx, &mut positions, &mut map);
+            update_and_draw_map(&rx, &mut positions, &mut map, &renderer);
         }
 
         thread::sleep(TICK_DURATION);
