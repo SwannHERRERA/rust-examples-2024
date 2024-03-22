@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc::Receiver};
+use std::{collections::HashMap, fmt::Display, sync::mpsc::Receiver};
 
 use crate::{renderer::Renderer, Message, NB_ROBOTS};
 
@@ -6,6 +6,23 @@ use crate::{renderer::Renderer, Message, NB_ROBOTS};
 pub enum CellType {
     Blank,
     Robot(u32),
+}
+
+impl Display for CellType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let c = match self {
+            CellType::Blank => ' ',
+            CellType::Robot(id) => match id {
+                0 => '@',
+                1 => '%',
+                2 => '#',
+                3 => '*',
+                4 => '+',
+                _ => unimplemented!(),
+            },
+        };
+        write!(f, "{}", c)
+    }
 }
 
 pub type Map2D = Vec<Vec<CellType>>;
